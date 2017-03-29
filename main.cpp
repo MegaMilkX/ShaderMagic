@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <iterator>
 
 #include <windows.h>
 
@@ -28,6 +29,17 @@ inline std::vector<std::string> split(const std::string& str, const std::string&
 class ShaderMagic
 {
 public:
+    struct Variable
+    {
+        std::string type;
+        std::string name;
+        
+        bool operator<(const Variable& other)
+        {
+            return name < other;
+        }
+    };
+
     void AddLayer(const std::string& source,
         const std::string& method = "")
     {
@@ -89,18 +101,33 @@ public:
     
     void ParseStatement(std::vector<std::string>& source)
     {
-        std::string statement = source[0];
-        source.erase(source.begin());
-        while(!source.empty() &&
-            statement.back() != ';')
+        std::string statement;
+        do
         {
-            statement.push_back(' ');
-            statement += source[0];
+            std::string token = source.front();
             source.erase(source.begin());
-        }
+            if(!statement.empty())
+                statement.push_back(' ');
+            statement += token;
+            
+            if(token == "in")
+            {
+                std::cout << "FOUND INPUT" << std::endl;
+            }
+            else if(token == "out")
+            {
+                std::cout << "FOUND OUT" << std::endl;
+            }
+            
+            if(statement.back() == ';')
+                break;
+        }while(!source.empty());
         
         std::cout << statement << std::endl;
     }
+    
+    std::set<Variable> inputs;
+    std::set<std::string> sourceParts;
 };
 
 int main()
