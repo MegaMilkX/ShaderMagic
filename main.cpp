@@ -12,7 +12,37 @@ class ShaderMagic
 public:
     void Parts(const std::string& source)
     {
+        std::vector<GLSLTok::Token> tokens =
+            GLSLTok::Tokenize(source);
         
+        for(unsigned i = 0; i < tokens.size(); ++i)
+        {
+            std::vector<GLSLTok::Token> partTokens;
+            if(tokens[i] == "#vertex")
+            {
+                i++;
+                while(i < tokens.size() &&
+                    tokens[i] != "#vertex" &&
+                    tokens[i] != "#fragment")
+                {
+                    partTokens.push_back(tokens[i]);
+                }
+                
+                // TODO: Save part
+            }
+            else if(tokens[i] == "#fragment")
+            {
+                i++;
+                while(i < tokens.size() &&
+                    tokens[i] != "#vertex" &&
+                    tokens[i] != "#fragment")
+                {
+                    partTokens.push_back(tokens[i]);
+                }
+                
+                // TODO: Save part
+            }
+        }
     }
     std::string Make()
     {
