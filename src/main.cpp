@@ -95,6 +95,7 @@ inline Snippet MakeSnippet(const std::string& source)
         else
         {
             snip.source += tok;
+            snip.source += " ";
             if(tok.type == GLSLTok::Token::SEMICOLON)
                 snip.source += "\n";
         }
@@ -214,27 +215,9 @@ inline void PutIndex(
     snipStack.push_back(index);
 }
 
-inline void PutDecl(
-    std::vector<std::string>& declStack,
-    const std::string& decl
-    )
-{
-    for(unsigned i = 0; i < declStack.size(); ++i)
-    {
-        if(declStack[i] == decl)
-        {
-            declStack.erase(declStack.begin() + i);
-            break;
-        }
-    }
-    
-    declStack.push_back(decl);
-}
-
 inline void StackSnippet(
     std::vector<Snippet>& snips,
     std::vector<unsigned>& snipStack,
-    std::vector<std::string>& declStack,
     Snippet& snip
     )
 {
@@ -243,13 +226,10 @@ inline void StackSnippet(
         unsigned snipIdx;
         if(!PickOutput(snips, snip.inputs[i], snipIdx))
         {
-            Variable var = snip.inputs[i];
-            std::string decl = var.type + " " + var.name;
-            PutDecl(declStack, decl);
             continue;
         }
         PutIndex(snipStack, snipIdx);
-        StackSnippet(snips, snipStack, declStack, snips[snipIdx]);
+        StackSnippet(snips, snipStack, snips[snipIdx]);
     }
 }
 
@@ -262,24 +242,16 @@ inline std::string MakeSource(
     
     Snippet firstSnip = MakeSnippet(source);
     std::vector<unsigned> snipStack;
-    std::vector<std::string> declStack;
     
-    StackSnippet(snips, snipStack, declStack, firstSnip);
-    
-    for(unsigned i = 0; i < declStack.size(); ++i)
-    {
-        result += declStack[i];
-        result += ";\n";
-    }
-    result += "void main()\n{\n";
+    StackSnippet(snips, snipStack, firstSnip);
+
     for(int i = snipStack.size() - 1; i >= 0; --i)
     {
-        result += "    ";
+        result += "\n";
         result += snips[snipStack[i]].source;
     }
-    result += "    ";
+
     result += firstSnip.source;
-    result += "}\n";
     
     return result;
 }
@@ -288,12 +260,6 @@ inline std::string MakeSource(
 
 int main()
 {
-    SM::Snippet snip = SM::MakeSnippet(
-        R"(
-            
-        )"
-    );
-    
     std::vector<SM::Snippet> snips = 
         SM::MakeSnippets(
             R"(
@@ -302,24 +268,50 @@ int main()
                 in mat4 MatrixModel;
                 in mat4 MatrixView;
                 in mat4 MatrixProjection;
-                out vec3 PositionWorld;
-                PositionWorld = 
-                    Position * 
+                out vec4 PositionWorld;
+                PositionWorld =  
                     MatrixProjection * 
                     MatrixView * 
-                    MatrixModel;
-            #vertex 320
-                
-            #fragment
+                    MatrixModel *
+                    vec4(Position, 1.0);
             #vertex
+                in vec3 Normal;
+                in mat4 MatrixModel;
+                out vec3 NormalModel;
+                NormalModel = (MatrixModel * vec4(Normal, 0.0)).xyz;
+            #vertex
+                in vec3 Position;
+                in mat4 MatrixModel;
+                out vec3 FragPosWorld;
+                FragPosWorld = vec3(MatrixModel * vec4(Position, 1.0));
+            #fragment
+                in vec3 LightPosition;
+                in vec3 FragPosWorld;
+                out vec3 LightDirection;
+                LightDirection = normalize(LightPosition - FragPosWorld);
+            #fragment
+                in vec3 NormalModel;
+                in vec3 LightRGB;
+                in vec3 LightPosition;
+                in vec3 FragPosWorld;
+                in vec3 LightDirection;
+                out vec3 LightOmniLambert;
+                float diff = max(dot(NormalModel, LightDirection), 0.0);
+                float dist = distance(LightPosition, FragPosWorld);
+                LightOmniLambert = 
+                    LightRGB * 
+                    diff *
+                    (1.0 / (1.0 + 0.5 * dist + 3.0 * dist * dist));
             )"
         );
         
     std::string source = MakeSource(
         snips,
         R"(
-            in vec3 PositionWorld;
-            gl_Position = PositionWorld;
+            in vec3 AmbientColor;
+            in vec3 LightOmniLambert;
+            out vec4 fragColor;
+            fragColor = vec4(AmbientColor + LightOmniLambert, 1.0);
         )"
     );
     
