@@ -14,6 +14,16 @@ struct Variable
 {
     std::string type;
     std::string name;
+    
+    bool operator==(const Variable& other) const
+    {
+        return name == other.name;
+    }
+    
+    void Print()
+    {
+        std::cout << type << " " << name << ";\n";
+    }
 };
     
 struct Snippet
@@ -21,11 +31,40 @@ struct Snippet
     std::vector<Variable> inputs;
     std::vector<Variable> outputs;
     std::string source;
+    
+    void AddInput(const Variable& var)
+    {
+        for(unsigned i = 0; i < inputs.size(); ++i)
+        {
+            if(inputs[i] == var)
+                return;
+        }
+        
+        inputs.push_back(var);
+    }
+    
+    void AddOutput(const Variable& var)
+    {
+        for(unsigned i = 0; i < outputs.size(); ++i)
+        {
+            if(outputs[i] == var)
+                return;
+        }
+        
+        outputs.push_back(var);
+    }
 };
 
 void Print(Snippet& snip)
 {
     std::cout << "== SNIPPET ==========" << std::endl;
+    std::cout << "-- OUTPUTS ----------" << std::endl;
+    for(unsigned i = 0; i < snip.outputs.size(); ++i)
+        snip.outputs[i].Print();
+    std::cout << "-- INPUTS -----------" << std::endl;
+    for(unsigned i = 0; i < snip.inputs.size(); ++i)
+        snip.inputs[i].Print();
+    std::cout << "-- SOURCE -----------" << std::endl;
     std::cout << snip.source << std::endl;
     std::cout << std::endl;
 }
@@ -218,40 +257,58 @@ inline void PutIndex(
 inline void StackSnippet(
     std::vector<Snippet>& snips,
     std::vector<unsigned>& snipStack,
-    Snippet& snip
+    Snippet& snip,
+    Snippet& result
     )
 {
+    for(unsigned i = 0; i < snip.outputs.size(); ++i)
+    {
+        Variable& var = snip.outputs[i];
+        result.AddOutput(var);
+    }
+    
     for(unsigned i = 0; i < snip.inputs.size(); ++i)
     {
         unsigned snipIdx;
         if(!PickOutput(snips, snip.inputs[i], snipIdx))
         {
+            result.AddInput(snip.inputs[i]);
             continue;
         }
         PutIndex(snipStack, snipIdx);
-        StackSnippet(snips, snipStack, snips[snipIdx]);
+        StackSnippet(
+            snips, 
+            snipStack, 
+            snips[snipIdx],
+            result
+        );
     }
 }
 
-inline std::string MakeSource(
+inline Snippet AssembleSnippet(
     std::vector<Snippet>& snips,
     const std::string& source
     )
 {
-    std::string result;
+    Snippet result;
     
     Snippet firstSnip = MakeSnippet(source);
     std::vector<unsigned> snipStack;
     
-    StackSnippet(snips, snipStack, firstSnip);
+    StackSnippet(
+        snips, 
+        snipStack, 
+        firstSnip, 
+        result
+    );
 
     for(int i = snipStack.size() - 1; i >= 0; --i)
     {
-        result += "\n";
-        result += snips[snipStack[i]].source;
+        result.source += "\n";
+        result.source += snips[snipStack[i]].source;
     }
-
-    result += firstSnip.source;
+    result.source += "\n";
+    result.source += firstSnip.source;
     
     return result;
 }
@@ -305,7 +362,7 @@ int main()
             )"
         );
         
-    std::string source = MakeSource(
+    SM::Snippet snip = AssembleSnippet(
         snips,
         R"(
             in vec3 AmbientColor;
@@ -315,7 +372,7 @@ int main()
         )"
     );
     
-    std::cout << source << std::endl;
+    SM::Print(snip);
     
     /*
     for(unsigned i = 0; i < snips.size(); ++i)
