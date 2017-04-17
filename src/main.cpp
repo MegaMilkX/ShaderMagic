@@ -30,6 +30,7 @@ struct Snippet
 {
     std::vector<Variable> inputs;
     std::vector<Variable> outputs;
+    std::vector<Variable> other; // uniforms
     std::string source;
     
     void AddInput(const Variable& var)
@@ -43,6 +44,18 @@ struct Snippet
         inputs.push_back(var);
     }
     
+    void RemoveInput(const Variable& var)
+    {
+        for(unsigned i = 0; i < inputs.size(); ++i)
+        {
+            if(inputs[i] == var)
+            {
+                inputs.erase(inputs.begin() + i);
+                return;
+            }
+        }
+    }
+    
     void AddOutput(const Variable& var)
     {
         for(unsigned i = 0; i < outputs.size(); ++i)
@@ -53,17 +66,27 @@ struct Snippet
         
         outputs.push_back(var);
     }
+    
+    void AddOther(const Variable& var)
+    {
+        for(unsigned i = 0; i < other.size(); ++i)
+        {
+            if(other[i] == var)
+                return;
+        }
+        other.push_back(var);
+    }
 };
 
 void Print(Snippet& snip)
 {
     std::cout << "== SNIPPET ==========" << std::endl;
-    std::cout << "-- OUTPUTS ----------" << std::endl;
-    for(unsigned i = 0; i < snip.outputs.size(); ++i)
-        snip.outputs[i].Print();
     std::cout << "-- INPUTS -----------" << std::endl;
     for(unsigned i = 0; i < snip.inputs.size(); ++i)
         snip.inputs[i].Print();
+    std::cout << "-- OUTPUTS ----------" << std::endl;
+    for(unsigned i = 0; i < snip.outputs.size(); ++i)
+        snip.outputs[i].Print();
     std::cout << "-- SOURCE -----------" << std::endl;
     std::cout << snip.source << std::endl;
     std::cout << std::endl;
@@ -99,7 +122,8 @@ inline Snippet MakeSnippet(const std::string& source)
     while(GetNextToken(tokens, cursor, tok))
     {
         if(tok == "in" ||
-            tok == "out")
+            tok == "out" ||
+            tok == "uniform")
         {
             GLSLTok::Token specTok = tok;
             Variable var;
@@ -122,6 +146,8 @@ inline Snippet MakeSnippet(const std::string& source)
                 snip.inputs.push_back(var);
             else if(specTok == "out")
                 snip.outputs.push_back(var);
+            else if(specTok == "uniform")
+                snip.other.push_back(var);
             
             GetNextToken(tokens, cursor, tok);
             if(tok.type == GLSLTok::Token::OPERATOR)
@@ -174,11 +200,14 @@ inline unsigned FindLineEnd(
     return from;
 }
 
-inline std::vector<Snippet> MakeSnippets(const std::string& source)
+inline void MakeSnippets(
+    const std::string& source,
+    std::vector<Snippet>& vSnips,
+    std::vector<Snippet>& fSnips
+    )
 {
-    std::vector<Snippet> result;
-
     std::vector<unsigned> positions;
+    std::vector<char> types;
     std::string vertIdentifier = "#vertex";
     std::string fragIdentifier = "#fragment";
     for(unsigned i = 0; i < source.size(); ++i)
@@ -189,6 +218,7 @@ inline std::vector<Snippet> MakeSnippets(const std::string& source)
             unsigned end = FindLineEnd(source, i);
             positions.push_back(start);
             positions.push_back(end);
+            types.push_back(0);
         }
         else if(TryMatch(source, i, fragIdentifier))
         {
@@ -196,13 +226,20 @@ inline std::vector<Snippet> MakeSnippets(const std::string& source)
             unsigned end = FindLineEnd(source, i);
             positions.push_back(start);
             positions.push_back(end);
+            types.push_back(1);
         }
     }
     positions.push_back(source.size() - 1);
     positions.erase(positions.begin());
     for(unsigned i = 0; i < positions.size(); i+=2)
     {
-        result.push_back(
+        char type = types[i/2];
+        std::vector<Snippet>* v;
+        if(type == 0)
+            v = &vSnips;
+        else
+            v = &fSnips;
+        v->push_back(
             MakeSnippet(
                 source.substr(
                     positions[i], 
@@ -211,8 +248,6 @@ inline std::vector<Snippet> MakeSnippets(const std::string& source)
             )
         );
     }
-    
-    return result;
 }
 
 inline bool PickOutput(
@@ -257,32 +292,57 @@ inline void PutIndex(
 inline void StackSnippet(
     std::vector<Snippet>& snips,
     std::vector<unsigned>& snipStack,
-    Snippet& snip,
-    Snippet& result
+    Snippet& snip
     )
-{
-    for(unsigned i = 0; i < snip.outputs.size(); ++i)
-    {
-        Variable& var = snip.outputs[i];
-        result.AddOutput(var);
-    }
-    
+{    
     for(unsigned i = 0; i < snip.inputs.size(); ++i)
     {
         unsigned snipIdx;
         if(!PickOutput(snips, snip.inputs[i], snipIdx))
-        {
-            result.AddInput(snip.inputs[i]);
             continue;
-        }
         PutIndex(snipStack, snipIdx);
         StackSnippet(
             snips, 
             snipStack, 
-            snips[snipIdx],
-            result
+            snips[snipIdx]
         );
     }
+}
+
+inline std::vector<Snippet> ArrangeSnippets(
+    std::vector<Snippet>& snips,
+    Snippet& first
+    )
+{
+    std::vector<Snippet> result;
+    std::vector<unsigned> snipStack;
+    
+    StackSnippet(
+        snips, 
+        snipStack, 
+        first
+    );
+    
+    for(unsigned i = 0; i < snipStack.size(); ++i)
+        result.push_back(snips[snipStack[i]]);
+    
+    return result;
+}
+
+inline void MergeSnippets(Snippet& low, Snippet& top)
+{
+    low.source = "{\n" + top.source + "}" + "\n" + low.source;
+    
+    for(unsigned i = 0; i < top.outputs.size(); ++i)
+    {
+        low.AddOutput(top.outputs[i]);
+        low.RemoveInput(top.outputs[i]);
+    }
+    
+    for(unsigned i = 0; i < top.inputs.size(); ++i)
+        low.AddInput(top.inputs[i]);
+    for(unsigned i = 0; i < top.other.size(); ++i)
+        low.AddOther(top.other[i]);
 }
 
 inline Snippet AssembleSnippet(
@@ -290,25 +350,63 @@ inline Snippet AssembleSnippet(
     const std::string& source
     )
 {
-    Snippet result;
+    Snippet result = MakeSnippet(source);
     
-    Snippet firstSnip = MakeSnippet(source);
-    std::vector<unsigned> snipStack;
+    std::vector<Snippet> dependencies = 
+        ArrangeSnippets(snips, result);
     
-    StackSnippet(
-        snips, 
-        snipStack, 
-        firstSnip, 
-        result
-    );
-
-    for(int i = snipStack.size() - 1; i >= 0; --i)
+    for(unsigned i = 0; i < dependencies.size(); ++i)
     {
-        result.source += "\n";
-        result.source += snips[snipStack[i]].source;
+        MergeSnippets(result, dependencies[i]);
     }
-    result.source += "\n";
-    result.source += firstSnip.source;
+    
+    return result;
+}
+
+inline void LinkSnippets(
+    Snippet& snip, 
+    Snippet& next, 
+    std::vector<Snippet> extSnips
+    )
+{
+    extSnips.insert(extSnips.begin(), snip);
+    
+    std::vector<Snippet> snips = 
+        ArrangeSnippets(extSnips, next);
+        
+    extSnips.erase(extSnips.begin());
+        
+    for(unsigned i = 0; i < snips.size(); ++i)
+    {
+        MergeSnippets(snip, snips[i]);
+    }
+}
+
+inline std::string Finalize(Snippet& snip)
+{
+    std::string result;
+    
+    for(unsigned i = 0; i < snip.inputs.size(); ++i)
+    {
+        Variable& var = snip.inputs[i];
+        result += "in " + var.type + " " + var.name + ";\n";
+    }
+    result += "\n";
+    for(unsigned i = 0; i < snip.outputs.size(); ++i)
+    {
+        Variable& var = snip.outputs[i];
+        result += "out " + var.type + " " + var.name + ";\n";
+    }
+    result += "\n";
+    for(unsigned i = 0; i < snip.other.size(); ++i)
+    {
+        Variable& var = snip.other[i];
+        result += "uniform " + var.type + " " + var.name + ";\n";
+    }
+    
+    result += "\nvoid main()\n{\n";
+    result += snip.source;
+    result += "}\n";
     
     return result;
 }
@@ -317,62 +415,81 @@ inline Snippet AssembleSnippet(
 
 int main()
 {
-    std::vector<SM::Snippet> snips = 
-        SM::MakeSnippets(
-            R"(
-            #vertex
-                in vec3 Position;
-                in mat4 MatrixModel;
-                in mat4 MatrixView;
-                in mat4 MatrixProjection;
-                out vec4 PositionWorld;
-                PositionWorld =  
-                    MatrixProjection * 
-                    MatrixView * 
-                    MatrixModel *
-                    vec4(Position, 1.0);
-            #vertex
-                in vec3 Normal;
-                in mat4 MatrixModel;
-                out vec3 NormalModel;
-                NormalModel = (MatrixModel * vec4(Normal, 0.0)).xyz;
-            #vertex
-                in vec3 Position;
-                in mat4 MatrixModel;
-                out vec3 FragPosWorld;
-                FragPosWorld = vec3(MatrixModel * vec4(Position, 1.0));
-            #fragment
-                in vec3 LightPosition;
-                in vec3 FragPosWorld;
-                out vec3 LightDirection;
-                LightDirection = normalize(LightPosition - FragPosWorld);
-            #fragment
-                in vec3 NormalModel;
-                in vec3 LightRGB;
-                in vec3 LightPosition;
-                in vec3 FragPosWorld;
-                in vec3 LightDirection;
-                out vec3 LightOmniLambert;
-                float diff = max(dot(NormalModel, LightDirection), 0.0);
-                float dist = distance(LightPosition, FragPosWorld);
-                LightOmniLambert = 
-                    LightRGB * 
-                    diff *
-                    (1.0 / (1.0 + 0.5 * dist + 3.0 * dist * dist));
-            )"
-        );
-        
-    SM::Snippet snip = AssembleSnippet(
-        snips,
+    std::vector<SM::Snippet> vertSnips;
+    std::vector<SM::Snippet> fragSnips;
+    SM::MakeSnippets(
         R"(
-            in vec3 AmbientColor;
+        #vertex
+            in vec3 Position;
+            uniform mat4 MatrixModel;
+            uniform mat4 MatrixView;
+            uniform mat4 MatrixProjection;
+            out vec4 PositionWorld;
+            PositionWorld =  
+                MatrixProjection * 
+                MatrixView * 
+                MatrixModel *
+                vec4(Position, 1.0);
+        #vertex
+            in vec3 Normal;
+            uniform mat4 MatrixModel;
+            out vec3 NormalModel;
+            NormalModel = (MatrixModel * vec4(Normal, 0.0)).xyz;
+        #vertex
+            in vec3 Position;
+            uniform mat4 MatrixModel;
+            out vec3 FragPosWorld;
+            FragPosWorld = vec3(MatrixModel * vec4(Position, 1.0));
+        #fragment
+            uniform vec3 LightPosition;
+            in vec3 FragPosWorld;
+            out vec3 LightDirection;
+            LightDirection = normalize(LightPosition - FragPosWorld);
+        #fragment
+            in vec3 NormalModel;
+            uniform vec3 LightRGB;
+            uniform vec3 LightPosition;
+            in vec3 FragPosWorld;
+            in vec3 LightDirection;
+            out vec3 LightOmniLambert;
+            float diff = max(dot(NormalModel, LightDirection), 0.0);
+            float dist = distance(LightPosition, FragPosWorld);
+            LightOmniLambert = 
+                LightRGB * 
+                diff *
+                (1.0 / (1.0 + 0.5 * dist + 3.0 * dist * dist));
+        )",
+        vertSnips,
+        fragSnips
+    );
+    
+    SM::Snippet vSnip = AssembleSnippet(
+        vertSnips,
+        R"(
+            in vec3 PositionWorld;
+            gl_Position = PositionWorld;
+        )"
+    );
+        
+    SM::Snippet fSnip = AssembleSnippet(
+        fragSnips,
+        R"(
+            uniform vec3 AmbientColor;
             in vec3 LightOmniLambert;
             out vec4 fragColor;
             fragColor = vec4(AmbientColor + LightOmniLambert, 1.0);
         )"
     );
     
-    SM::Print(snip);
+    LinkSnippets(vSnip, fSnip, vertSnips);
+    
+    std::string vshader = SM::Finalize(vSnip);
+    std::string fshader = SM::Finalize(fSnip);
+    
+    std::cout << "== VERTEX =========" << std::endl;
+    std::cout << vshader << std::endl;
+    std::cout << "== FRAGMENT =======" << std::endl;
+    std::cout << fshader << std::endl;
     
     /*
     for(unsigned i = 0; i < snips.size(); ++i)
