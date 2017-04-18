@@ -127,7 +127,7 @@ inline Token TokenIdentifier(std::string& source)
         };
     
     Token token;
-    int charIndex = 0;
+    unsigned charIndex = 0;
     while(charIndex < source.size())
     {
         if(token.data.empty())
@@ -182,7 +182,7 @@ inline Token TokenPreprocessor(std::string& source)
         token.type = Token::PREPROCESSOR;
         source.erase(source.begin());
         
-        int charIndex = 0;
+        unsigned charIndex = 0;
         while(charIndex < source.size())
         {
             if(source[charIndex] == '\n')
@@ -212,7 +212,7 @@ inline Token TokenWhitespace(std::string& source)
         token.type = Token::WHITESPACE;
         source.erase(source.begin());
         
-        int charIndex = 0;
+        unsigned charIndex = 0;
         while(charIndex < source.size())
         {
             if(!(source[charIndex] == 32 ||
@@ -233,7 +233,7 @@ inline Token TokenWhitespace(std::string& source)
     return token;
 }
 
-inline bool TokFloatingSuffix(std::string& source, int& offset)
+inline bool TokFloatingSuffix(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -254,7 +254,7 @@ inline bool TokFloatingSuffix(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokDigitSequence(std::string& source, int& offset)
+inline bool TokDigitSequence(std::string& source, unsigned& offset)
 {
     int tmp_offset = offset;
     while(offset < source.size() &&
@@ -267,7 +267,7 @@ inline bool TokDigitSequence(std::string& source, int& offset)
     return tmp_offset != offset;
 }
 
-inline bool TokSign(std::string& source, int& offset)
+inline bool TokSign(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -282,7 +282,7 @@ inline bool TokSign(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokExponentPart(std::string& source, int& offset)
+inline bool TokExponentPart(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -304,7 +304,7 @@ inline bool TokExponentPart(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokFractionalConstant(std::string& source, int& offset)
+inline bool TokFractionalConstant(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -335,7 +335,7 @@ inline bool TokFractionalConstant(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokFloatingConstant(std::string& source, int& offset)
+inline bool TokFloatingConstant(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -362,7 +362,7 @@ inline bool TokFloatingConstant(std::string& source, int& offset)
 inline Token TokenFloatLiteral(std::string& source)
 {
     Token token;
-    int offset = 0;
+    unsigned offset = 0;
     if(TokFloatingConstant(source, offset))
     {
         token.data = source.substr(0, offset);
@@ -373,7 +373,7 @@ inline Token TokenFloatLiteral(std::string& source)
     return token;
 }
 
-inline bool TokHexDigit(std::string& source, int& offset)
+inline bool TokHexDigit(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -392,7 +392,7 @@ inline bool TokHexDigit(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokOctDigit(std::string& source, int& offset)
+inline bool TokOctDigit(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -406,7 +406,7 @@ inline bool TokOctDigit(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokNonzeroDigit(std::string& source, int& offset)
+inline bool TokNonzeroDigit(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -420,7 +420,7 @@ inline bool TokNonzeroDigit(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokDigit(std::string& source, int& offset)
+inline bool TokDigit(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -434,7 +434,7 @@ inline bool TokDigit(std::string& source, int& offset)
         return TokNonzeroDigit(source, offset);
 }
 
-inline bool TokHexDigits(std::string& source, int& offset)
+inline bool TokHexDigits(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -450,7 +450,7 @@ inline bool TokHexDigits(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokOctDigits(std::string& source, int& offset)
+inline bool TokOctDigits(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -464,7 +464,7 @@ inline bool TokOctDigits(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokDecDigits(std::string& source, int& offset)
+inline bool TokDecDigits(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -478,7 +478,7 @@ inline bool TokDecDigits(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokHexConstant(std::string& source, int& offset)
+inline bool TokHexConstant(std::string& source, unsigned& offset)
 {
     if(offset+1 >= source.size())
         return false;
@@ -496,7 +496,7 @@ inline bool TokHexConstant(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokOctConstant(std::string& source, int& offset)
+inline bool TokOctConstant(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -511,7 +511,7 @@ inline bool TokOctConstant(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokDecConstant(std::string& source, int& offset)
+inline bool TokDecConstant(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -525,7 +525,7 @@ inline bool TokDecConstant(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokIntegerSuffix(std::string& source, int& offset)
+inline bool TokIntegerSuffix(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -540,7 +540,7 @@ inline bool TokIntegerSuffix(std::string& source, int& offset)
     return false;
 }
 
-inline bool TokIntegerConstant(std::string& source, int& offset)
+inline bool TokIntegerConstant(std::string& source, unsigned& offset)
 {
     if(offset >= source.size())
         return false;
@@ -568,7 +568,7 @@ inline Token TokenIntLiteral(std::string& source)
 {
     Token token;
     
-    int offset = 0;
+    unsigned offset = 0;
     if(TokIntegerConstant(source, offset))
     {
         token.data = source.substr(0, offset);
