@@ -31,6 +31,7 @@ struct Snippet
     std::vector<Variable> inputs;
     std::vector<Variable> outputs;
     std::vector<Variable> other; // uniforms
+    std::vector<Variable> locals;
     std::string source;
     
     void AddInput(const Variable& var)
@@ -75,6 +76,18 @@ struct Snippet
                 return;
         }
         other.push_back(var);
+    }
+    
+    void RemoveLocal(const Variable& var)
+    {
+        for(unsigned i = 0; i < locals.size(); ++i)
+        {
+            if(locals[i] == var)
+            {
+                locals.erase(locals.begin() + i);
+                return;
+            }
+        }
     }
 };
 
@@ -363,10 +376,29 @@ inline Snippet AssembleSnippet(
     return result;
 }
 
+inline void CleanupOutputs(Snippet& snip, Snippet& next)
+{
+    snip.locals = snip.outputs;
+    snip.outputs.clear();
+    for(unsigned i = 0; i < next.inputs.size(); ++i)
+    {
+        Variable& in = next.inputs[i];
+        for(unsigned j = 0; j < snip.locals.size(); ++j)
+        {
+            Variable& local = snip.locals[j];
+            if(in == local)
+            {
+                snip.AddOutput(local);
+                snip.RemoveLocal(local);
+            }
+        }
+    }
+}
+
 inline void LinkSnippets(
     Snippet& snip, 
     Snippet& next, 
-    std::vector<Snippet> extSnips
+    std::vector<Snippet> extSnips = std::vector<Snippet>()
     )
 {
     extSnips.insert(extSnips.begin(), snip);
@@ -380,6 +412,8 @@ inline void LinkSnippets(
     {
         MergeSnippets(snip, snips[i]);
     }
+    
+    CleanupOutputs(snip, next);
 }
 
 inline std::string Finalize(Snippet& snip)
@@ -405,6 +439,11 @@ inline std::string Finalize(Snippet& snip)
     }
     
     result += "\nvoid main()\n{\n";
+    for(unsigned i = 0; i < snip.locals.size(); ++i)
+    {
+        Variable& var = snip.locals[i];
+        result += var.type + " " + var.name + ";\n";
+    }
     result += snip.source;
     result += "}\n";
     
@@ -482,6 +521,7 @@ int main()
     );
     
     LinkSnippets(vSnip, fSnip, vertSnips);
+    CleanupOutputs(fSnip, SM::MakeSnippet("in vec4 fragColor;"));
     
     std::string vshader = SM::Finalize(vSnip);
     std::string fshader = SM::Finalize(fSnip);
