@@ -542,10 +542,10 @@ inline std::string Finalize(Snippet& snip)
 
 int main()
 {
-    std::vector<SM::Snippet> vertSnips;
-    std::vector<SM::Snippet> fragSnips;
-    std::vector<SM::Snippet> genericSnips;
-    SM::MakeSnippets(
+    std::vector<Au::GLSLStitch::Snippet> vertSnips;
+    std::vector<Au::GLSLStitch::Snippet> fragSnips;
+    std::vector<Au::GLSLStitch::Snippet> genericSnips;
+    Au::GLSLStitch::MakeSnippets(
         R"(
         #vertex PositionWorld
             in vec3 Position;
@@ -596,7 +596,7 @@ int main()
         genericSnips
     );
     
-    SM::Snippet vSnip = SM::AssembleSnippet(
+    Au::GLSLStitch::Snippet vSnip = Au::GLSLStitch::AssembleSnippet(
         vertSnips,
         R"(
             in vec3 PositionWorld;
@@ -604,7 +604,7 @@ int main()
         )"
     );
 
-    SM::Snippet fSnip = AssembleSnippet(
+    Au::GLSLStitch::Snippet fSnip = AssembleSnippet(
         fragSnips,
         R"(
             uniform vec3 AmbientColor;
@@ -615,10 +615,10 @@ int main()
     );
     
     LinkSnippets(vSnip, fSnip, vertSnips);
-    CleanupOutputs(fSnip, SM::MakeSnippet("in vec4 fragColor;"));
+    CleanupOutputs(fSnip, Au::GLSLStitch::MakeSnippet("in vec4 fragColor;"));
     
-    std::string vshader = SM::Finalize(vSnip);
-    std::string fshader = SM::Finalize(fSnip);
+    std::string vshader = Au::GLSLStitch::Finalize(vSnip);
+    std::string fshader = Au::GLSLStitch::Finalize(fSnip);
     
     std::cout << "== VERTEX =========" << std::endl;
     std::cout << vshader << std::endl;
@@ -628,7 +628,7 @@ int main()
     /*
     for(unsigned i = 0; i < snips.size(); ++i)
     {
-        SM::Print(snips[i]);
+        Au::GLSLStitch::Print(snips[i]);
     }
     */
     std::getchar();
