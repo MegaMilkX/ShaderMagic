@@ -7,8 +7,8 @@
 
 #include "glsltok.h"
 
-namespace SM
-{
+namespace Au{
+namespace GLSLStitch{
     
 struct Variable
 {
@@ -28,11 +28,57 @@ struct Variable
     
 struct Snippet
 {
+    std::string name;
     std::vector<Variable> inputs;
     std::vector<Variable> outputs;
     std::vector<Variable> other; // uniforms
     std::vector<Variable> locals;
     std::string source;
+    
+    void RenameInput(const std::string& from, const std::string& to)
+    {
+        for(unsigned i = 0; i < inputs.size(); ++i)
+            if(inputs[i].name == from)
+            { inputs[i].name = to; break; }
+        RenameSourceTokens(from, to);
+    }
+    
+    void RenameOutput(const std::string& from, const std::string& to)
+    {
+        for(unsigned i = 0; i < outputs.size(); ++i)
+            if(outputs[i].name == from)
+            { outputs[i].name = to; break; }
+        RenameSourceTokens(from, to);
+    }
+    
+    void RenameOther(const std::string& from, const std::string& to)
+    {
+        for(unsigned i = 0; i < other.size(); ++i)
+            if(other[i].name == from)
+            { other[i].name = to; break; }
+        RenameSourceTokens(from, to);
+    }
+    
+    void RenameLocal(const std::string& from, const std::string& to)
+    {
+        for(unsigned i = 0; i < locals.size(); ++i)
+            if(locals[i].name == from)
+            { locals[i].name = to; break; }
+        RenameSourceTokens(from, to);
+    }
+    
+    void RenameSourceTokens(const std::string& from, const std::string& to)
+    {
+        std::vector<GLSLTok::Token> tokens =
+            GLSLTok::Tokenize(source);
+        source.clear();
+        for(unsigned i = 0; i < tokens.size(); ++i)
+        {
+            if(tokens[i].data == from)
+                tokens[i].data = to;
+            source += tokens[i].data;
+        }
+    }
     
     void AddInput(const Variable& var)
     {
@@ -94,6 +140,7 @@ struct Snippet
 void Print(Snippet& snip)
 {
     std::cout << "== SNIPPET ==========" << std::endl;
+    std::cout << snip.name << std::endl;
     std::cout << "-- INPUTS -----------" << std::endl;
     for(unsigned i = 0; i < snip.inputs.size(); ++i)
         snip.inputs[i].Print();
@@ -213,16 +260,34 @@ inline unsigned FindLineEnd(
     return from;
 }
 
+inline std::string ParseSnippetName(const std::string& str)
+{
+    std::string name;
+    std::istringstream iss(str);
+    std::vector<std::string> tokens{
+        std::istream_iterator<std::string>{iss},
+        std::istream_iterator<std::string>{}
+    };
+    
+    if(tokens.size() > 1)
+        name = tokens[1];
+    
+    return name;
+}
+
 inline void MakeSnippets(
     const std::string& source,
     std::vector<Snippet>& vSnips,
-    std::vector<Snippet>& fSnips
+    std::vector<Snippet>& fSnips,
+    std::vector<Snippet>& gSnips
     )
 {
     std::vector<unsigned> positions;
     std::vector<char> types;
+    std::vector<std::string> names;
     std::string vertIdentifier = "#vertex";
     std::string fragIdentifier = "#fragment";
+    std::string genericIdentifier = "#generic";
     for(unsigned i = 0; i < source.size(); ++i)
     {
         if(TryMatch(source, i, vertIdentifier))
@@ -232,6 +297,7 @@ inline void MakeSnippets(
             positions.push_back(start);
             positions.push_back(end);
             types.push_back(0);
+            names.push_back(ParseSnippetName(source.substr(start, end - start)));
         }
         else if(TryMatch(source, i, fragIdentifier))
         {
@@ -240,6 +306,16 @@ inline void MakeSnippets(
             positions.push_back(start);
             positions.push_back(end);
             types.push_back(1);
+            names.push_back(ParseSnippetName(source.substr(start, end - start)));
+        }
+        else if(TryMatch(source, i, genericIdentifier))
+        {
+            unsigned start = i;
+            unsigned end = FindLineEnd(source, i);
+            positions.push_back(start);
+            positions.push_back(end);
+            types.push_back(2);
+            names.push_back(ParseSnippetName(source.substr(start, end - start)));
         }
     }
     positions.push_back(source.size() - 1);
@@ -250,8 +326,10 @@ inline void MakeSnippets(
         std::vector<Snippet>* v;
         if(type == 0)
             v = &vSnips;
-        else
+        else if(type == 1)
             v = &fSnips;
+        else
+            v = &gSnips;
         v->push_back(
             MakeSnippet(
                 source.substr(
@@ -260,6 +338,8 @@ inline void MakeSnippets(
                 )
             )
         );
+        v->back().name = names[i/2];
+        Print(v->back());
     }
 }
 
@@ -360,20 +440,27 @@ inline void MergeSnippets(Snippet& low, Snippet& top)
 
 inline Snippet AssembleSnippet(
     std::vector<Snippet>& snips,
-    const std::string& source
+    Snippet source
     )
 {
-    Snippet result = MakeSnippet(source);
-    
     std::vector<Snippet> dependencies = 
-        ArrangeSnippets(snips, result);
+        ArrangeSnippets(snips, source);
     
     for(unsigned i = 0; i < dependencies.size(); ++i)
     {
-        MergeSnippets(result, dependencies[i]);
+        MergeSnippets(source, dependencies[i]);
     }
     
-    return result;
+    return source;
+}
+
+inline Snippet AssembleSnippet(
+    std::vector<Snippet>& snips,
+    const std::string& source
+    )
+{
+    Snippet snip = MakeSnippet(source);
+    return AssembleSnippet(snips, snip);    
 }
 
 inline void CleanupOutputs(Snippet& snip, Snippet& next)
@@ -451,14 +538,16 @@ inline std::string Finalize(Snippet& snip)
 }
 
 }
+}
 
 int main()
 {
     std::vector<SM::Snippet> vertSnips;
     std::vector<SM::Snippet> fragSnips;
+    std::vector<SM::Snippet> genericSnips;
     SM::MakeSnippets(
         R"(
-        #vertex
+        #vertex PositionWorld
             in vec3 Position;
             uniform mat4 MatrixModel;
             uniform mat4 MatrixView;
@@ -469,22 +558,22 @@ int main()
                 MatrixView * 
                 MatrixModel *
                 vec4(Position, 1.0);
-        #vertex
+        #vertex NormalModel
             in vec3 Normal;
             uniform mat4 MatrixModel;
             out vec3 NormalModel;
             NormalModel = (MatrixModel * vec4(Normal, 0.0)).xyz;
-        #vertex
+        #vertex FragPosWorld
             in vec3 Position;
             uniform mat4 MatrixModel;
             out vec3 FragPosWorld;
             FragPosWorld = vec3(MatrixModel * vec4(Position, 1.0));
-        #fragment
+        #fragment LightDirection
             uniform vec3 LightPosition;
             in vec3 FragPosWorld;
             out vec3 LightDirection;
             LightDirection = normalize(LightPosition - FragPosWorld);
-        #fragment
+        #fragment LightOmniLambert
             in vec3 NormalModel;
             uniform vec3 LightRGB;
             uniform vec3 LightPosition;
@@ -497,19 +586,24 @@ int main()
                 LightRGB * 
                 diff *
                 (1.0 / (1.0 + 0.5 * dist + 3.0 * dist * dist));
+        #generic Multiply
+            in vec4 first;
+            in vec4 second;
+            out vec4 result = first * second;
         )",
         vertSnips,
-        fragSnips
+        fragSnips,
+        genericSnips
     );
     
-    SM::Snippet vSnip = AssembleSnippet(
+    SM::Snippet vSnip = SM::AssembleSnippet(
         vertSnips,
         R"(
             in vec3 PositionWorld;
             gl_Position = PositionWorld;
         )"
     );
-        
+
     SM::Snippet fSnip = AssembleSnippet(
         fragSnips,
         R"(
