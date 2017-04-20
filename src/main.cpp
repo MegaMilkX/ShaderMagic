@@ -137,7 +137,7 @@ struct Snippet
     }
 };
 
-void Print(Snippet& snip)
+inline void Print(Snippet& snip)
 {
     std::cout << "== SNIPPET ==========" << std::endl;
     std::cout << snip.name << std::endl;
